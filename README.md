@@ -30,6 +30,7 @@ Slides that introduce relevant concepts and methods can be downloaded from the l
   * [Text mining workflow for learning content analysis](https://1drv.ms/b/s!AjwXFgNk6IQbgheDJUZ5hViJPLos)
 * Slides for the workshop:
   * [Introduction to Text mining and its workflow](https://1drv.ms/b/s!AjwXFgNk6IQbghkOxH6jIp9oakUG)
+  * [Bagging and Random Forest](https://1drv.ms/b/s!AjwXFgNk6IQbgh5G-vQCyWnaXwZL)
   * [A Glimpse at Word Embeddings](https://1drv.ms/b/s!AjwXFgNk6IQbghXMfm0wTK6RLkqf)
   * [Affinity propagation for text clustering](https://1drv.ms/b/s!AjwXFgNk6IQbghvMSeEs9yqyar6q)
   * [Topic Modelling: LDA](https://1drv.ms/b/s!AjwXFgNk6IQbghGZ3aOHXoVQN-mz)
