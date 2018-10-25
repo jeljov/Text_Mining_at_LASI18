@@ -109,8 +109,8 @@ table(train_posts$newsgroup)
 table(test_posts$newsgroup)
 # Both training and test sets are well balanced.
 # If this was not the case, that is, if there was a prominent class imbalance,
-# we would have had to apply a subsampling technique to reduce the difference;
-# these techniques are well covered in the *caret* R package:
+# we would have had to apply a subsampling technique on the training set to 
+# reduce the difference; these techniques are well covered in the *caret* R package:
 # https://topepo.github.io/caret/subsampling-for-class-imbalances.html
 
 # We will now use the training set to build a classifier.
@@ -238,7 +238,7 @@ summary(dfreq)
 
 # Use the (reduced) DTM to setup a feature data frame with labels.
 # It will serve as the input for a classification algorithm. 
-train_df <- cbind(Label = train_posts$newsgroup, data.frame(train_dfm_reduced))
+train_df <- create_feature_df(train_dfm_reduced, train_posts$newsgroup)
 
 
 ########################################################
@@ -289,7 +289,7 @@ saveRDS(rpart_cv_1, "models/tutorial/rpart_cv_1.RData")
 # First, take the cp value of the best performing model in CV
 tf_best_cp <- rpart_cv_1$bestTune$cp
 # Then, extract performance measures for the best cp value 
-tf_best_results <- with(rpart_cv_1, results[results$cp == tf_best_cp,])
+tf_best_results <- rpart_cv_1$results %>% filter(cp == tf_best_cp)
 tf_best_results
 
 # By inspecting the tree, we can get an idea of the terms (features)
@@ -365,7 +365,7 @@ train_dfm_topXperc
 # We've reduce the feature set to ~2.7K ngrams
 
 # Make a clean data frame to be used as input for building a classifier
-train_tfidf_df <- cbind(Label = train_posts$newsgroup, data.frame(train_dfm_topXperc))
+train_tfidf_df <- create_feature_df(train_dfm_topXperc, train_posts$newsgroup)
 
 #####################################################################
 # BUILD the 2nd ML MODEL: RPART + UNIGRAMS & BIGRAMS + TF-IDF WEIGHTS
@@ -391,7 +391,7 @@ saveRDS(rpart_cv_2, "models/tutorial/rpart_cv_2.RData")
 
 # Extract and store evaluation metrics for the best performing model
 tfidf_best_cp <- rpart_cv_2$bestTune$cp
-tfidf_best_results <- with(rpart_cv_2, results[results$cp == tfidf_best_cp,])
+tfidf_best_results <- rpart_cv_2$results %>% filter(cp == tfidf_best_cp)
 
 # Compare the performance of the two classification models built so far
 data.frame(rbind(tf_best_results, tfidf_best_results), 
@@ -399,7 +399,7 @@ data.frame(rbind(tf_best_results, tfidf_best_results),
 # The model achieved slightly weaker performance than the previous one.
 
 # Before proceeding, let's examine the terms (features) used for building the model
-sort(rpart_cv_2$finalModel$variable.importance, decreasing = TRUE)[1:20]
+sort(rpart_cv_2$finalModel$variable.importance, decreasing = TRUE)[1:30]
 
 # In the next step, we will apply a more sophisticated feature reduction method.
 # In particular, we'll apply Singular Value Decomposition (SVD) to the DTM of
@@ -468,10 +468,9 @@ str(svd_res)
 #     the extracted dimensions and the documents
 
 # Save the SVD result to have a quick access to it later
-saveRDS(svd_res, "models/tutorial/svd_res.RData")
-
-# Load the saved SVD object
-# svd_res <- readRDS("models/tutorial/svd_res.RData")
+saveRDS(svd_res$d, "models/tutorial/svd_d.RData")
+saveRDS(svd_res$u, "models/tutorial/svd_u.RData")
+saveRDS(svd_res$v, "models/tutorial/svd_v.RData")
 
 # Take a glimpse at the new feature set (the right singular vector):
 View(svd_res$v[1:20,1:50])
@@ -553,7 +552,7 @@ plot(rf_cv_1)
 
 # Extract evaluaton measures for the best performing model 
 svd_best_mtry <- rf_cv_1$bestTune$mtry
-svd_best_res <- with(rf_cv_1, results[results$mtry==svd_best_mtry,])
+svd_best_res <- rf_cv_1$results %>% filter(mtry==svd_best_mtry)
 
 # Compare the results with the previously CV-ed models
 comparison <- data.frame(rbind(tf_best_results[,-1], # exclude the cp parameter 
@@ -567,7 +566,7 @@ comparison$NFeatures <- c(ncol(train_df),
 comparison
 # The combined use of the new feature set and a more powerful algorithm significantly 
 # improved the results, in terms of both accuracy and kappa measures. In addition,
-# the number of features is over 16 times smaller than in the second best model; this
+# the number of features is over 10 times smaller than in the second best model; this
 # is highly important as it makes the model less prone to overfitting.
 
 ##################
@@ -730,7 +729,7 @@ train_eval <- confusionMatrix(data = rf_cv_1$finalModel$predicted,
                                 reference = train_svd_df$Label)
 get_eval_measures(train_eval)
 
-# All metrics except for the recall are somewhat lower on the test set, which is,  
+# All metrics are somewhat lower on the test set, which is,  
 # often the case.
 
 # Note: the fact that we got slightly better results on CV...

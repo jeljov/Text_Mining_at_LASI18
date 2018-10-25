@@ -70,6 +70,40 @@ plot_ng_feature_comparison <- function(df, feature, f_name) {
     theme_bw()
 }
 
+
+## Function for creating a feature data frame out of
+## - a DTM, represented in the form of quanteda's dfm, and 
+## - a vector of class labels
+create_feature_df <- function(train_dfm, class_labels) {
+  
+  train_df <- convert(train_dfm, "data.frame")
+  # The 'convert' f. from quanteda adds 'document' as the 1st feature (column)
+  # in the resulting data frame. It needs to be removed before the data frame 
+  # is used for training.
+  if ((names(train_df)[1] == 'document') & (class(train_df[,1])=='character'))
+    train_df <- train_df[, -1]
+  
+  # Check if there are documents that have 'lost' all their words, that is,
+  # if there are rows with all zeros
+  doc_word_cnt <- rowSums(train_df)
+  zero_word_docs <- which(doc_word_cnt == 0)
+  # If there are zero-word rows, remove them
+  if (length(zero_word_docs) > 0) {
+    print(paste("Number of documents to remove due to sparsity:", length(zero_word_docs)))
+    train_df <- train_df[-zero_word_docs,]
+    class_labels <- class_labels[-zero_word_docs]
+  }
+  
+  # Assure that column names are regular R names
+  require(janitor)
+  train_df <- clean_names(train_df)
+  
+  # Combine class labels and the features 
+  cbind(Label = class_labels, train_df)
+  
+}
+
+
 ## Function for performing 5-fold cross validation on the given training data set
 ## (train.data) using the specified ML algorithm (ml.method). 
 ## Cross-validation is done in parallel on the specified number (nclust) of logical cores.
@@ -104,11 +138,13 @@ cross_validate_classifier <- function(seed,
   
   set.seed(seed)
   if (ml.method=="rpart")
-    model.cv <- train(Label ~ ., data = train.data, 
-                    method = 'rpart', trControl = cv.cntrl, 
-                    tuneGrid = grid.spec, metric = metric)
+    model.cv <- train(x = train.data[,names(train.data) != 'Label'],
+                      y = train.data$Label,
+                      method = 'rpart', trControl = cv.cntrl, 
+                      tuneGrid = grid.spec, metric = metric)
   if (ml.method=="rf")
-    model.cv <- train(Label ~ ., data = train.data, 
+    model.cv <- train(x = train.data[,names(train.data) != 'Label'],
+                      y = train.data$Label, 
                       method = 'rf', trControl = cv.cntrl, 
                       tuneGrid = grid.spec, metric = metric,
                       ntree = ntree)

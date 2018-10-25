@@ -202,10 +202,10 @@ sci_lda <- LDA(x = convert(sci_dfm_reduced, "topicmodels"), # convert quanteda's
                               burnin = burnin, iter = iter, thin=thin))
 
 # Save the model as the model building process lasts long
-saveRDS(sci_lda, "models/LDA/Sci_NewsGroup_4_topic_LDA.RData")
+# saveRDS(sci_lda, "models/LDA/Sci_NewsGroup_4_topic_LDA.RData")
 
 # load the saved model
-# sci_lda <- readRDS("models/LDA/Sci_NewsGroup_4_topic_LDA.RData")
+sci_lda <- readRDS("models/LDA/Sci_NewsGroup_4_topic_LDA.RData")
 
 # Examine the model's hyperparameters alpha and beta
 sci_lda@alpha
@@ -446,7 +446,7 @@ k_tuning
 # saveRDS(k_tuning, "models/LDA/lda_tuning_results.RData")
 
 # Load the saved results
-# k_tuning <- readRDS("models/LDA/lda_tuning_results.RData")
+k_tuning <- readRDS("models/LDA/lda_tuning_results.RData")
 
 # It will be far easier to examine the results visually
 FindTopicsNumber_plot(k_tuning)

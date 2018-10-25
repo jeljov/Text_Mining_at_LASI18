@@ -78,8 +78,8 @@ test_folder <- "data/20news-bydate/20news-bydate-test/"
 # Read in the contents of all posts from the train dataset
 # Note: read_folder() is a utility function defined in the UtilityFunctions.R 
 raw_train_data <- data_frame(folder = dir(training_folder, full.names = TRUE)) %>%
-  unnest(map(folder, read_folder)) %>%  # map results in a list-column; 
-                                        # unnest transforms each element of a list into a row
+  unnest(map(folder, read_folder)) %>%  # each mapping iteration results in a df; 
+                                        # unnest 'composes' individual dfs into a large df
   transmute(newsgroup = basename(folder), id, text)
 # Do the same for the test dataset
 raw_test_data <- data_frame(folder = dir(test_folder, full.names = TRUE)) %>%
@@ -132,7 +132,9 @@ with(cleaned_train_data, text[id==103128])
 
 # We will also remove 3 posts from the training set (9704, 9985, and 14991)
 # that contain a large amount of strange, non-text content
-cleaned_train_data <- cleaned_train_data %>% filter(!(id %in% c(9704, 9985, 14991)))
+cleaned_train_data[cleaned_train_data$id==9985, 'text']
+cleaned_train_data <- cleaned_train_data %>% 
+  filter(!(id %in% c(9704, 9985, 14991)))
 
 # Now, merge all lines of text that belong to the same post
 # (the merge_post_text() f. is defined in UtilityFunctions.R)
@@ -187,8 +189,8 @@ table(train_2cl$newsgroup)
 table(test_2cl$newsgroup)
 # Both training and test sets are well balanced.
 # If this was not the case, that is, if there was a prominent class imbalance,
-# we would have to apply a subsampling technique to reduce the difference;
-# these techniques are well covered in the *caret* R package:
+# we would have to apply a subsampling technique to reduce the difference in the
+# training set; these techniques are well covered in the *caret* R package:
 # https://topepo.github.io/caret/subsampling-for-class-imbalances.html
 
 # We will now use the training set to build a classifier.
@@ -370,7 +372,7 @@ train_tokens[[9]]
 # (e.g. overly frequent words in the given corpus). Or, you might want to 
 # consider a larger stopwords list (than the default one); in that case, 
 # check the stopwords lists offered by the stopwords R package:
-# stopwords::stopwords_getsources()
+stopwords::stopwords_getsources()
 # In any case, it is advised to inspect a stopword list before 
 # applying it to the problem at hand.
 head(stopwords(), n = 30)
@@ -428,7 +430,7 @@ summary(dfreq)
 
 # Use the (reduced) DTM to setup a feature data frame with labels.
 # It will serve as the input for a classification algorithm 
-train_df <- cbind(Label = train_2cl$newsgroup, data.frame(train_dfm_reduced))
+train_df <- create_feature_df(train_dfm_reduced, train_2cl$newsgroup)
 
 
 ########################################################
@@ -479,7 +481,7 @@ plot(rpart_cv_1)
 # First, take the cp value of the best performing model
 tf_best_cp <- rpart_cv_1$bestTune$cp
 # Then, extract performance measures for the best cp value 
-tf_best_results <- with(rpart_cv_1, results[results$cp == tf_best_cp,])
+tf_best_results <- rpart_cv_1$results %>% filter(cp == tf_best_cp)
 tf_best_results
 
 # We can also examine the words (features) that the DT algorithm selected as the most important
@@ -530,7 +532,7 @@ train_tfidf_reduced
 # We have reduced the feature set from ~12.35K to ~3K words
 
 # Make a data frame, to serve as input for a classifier, using the same process as before
-train_tfidf_df <- cbind(Label = train_2cl$newsgroup, data.frame(train_tfidf_reduced))
+train_tfidf_df <- create_feature_df(train_tfidf_reduced, train_2cl$newsgroup)
 # Use this data frame as the input for the next classification model
 
 ############################################################
@@ -557,7 +559,7 @@ plot(rpart_cv_2)
 
 # Extract and store evaluation metrics for the best performing model
 tfidf_best_cp <- rpart_cv_2$bestTune$cp
-tfidf_best_results <- with(rpart_cv_2, results[results$cp == tfidf_best_cp,])
+tfidf_best_results <- rpart_cv_2$results %>% filter(cp == tfidf_best_cp)
 
 # Compare the performance of the two classification models built so far
 data.frame(rbind(tf_best_results, tfidf_best_results), 
@@ -613,14 +615,14 @@ train_dfm_topXperc
 # We've reduce the feature set to ~2.7K ngrams 
 
 # Make a clean data frame to be used as input for building a classifier
-train_tfidf_df_2 <- cbind(Label = train_2cl$newsgroup, data.frame(train_dfm_topXperc))
+train_tfidf_df_2 <- create_feature_df(train_dfm_topXperc, train_2cl$newsgroup)
 
 #####################################################################
 # BUILD the 3rd ML MODEL: RPART + UNIGRAMS & BIGRAMS + TF-IDF WEIGHTS
 #####################################################################
 
 # Build a CV-ed model with the new feature set and all other settings unchanged
-rpart_cv_3 <- cross_validate_classifier(seed, 
+rpart_cv_3 <- cross_validate_classifier(seed,
                                         nclust = 5,
                                         train.data = train_tfidf_df_2,
                                         ml.method = "rpart",
@@ -638,12 +640,12 @@ plot(rpart_cv_3)
 
 # Extract and store evaluation metrics for the best performing model
 tfidf_2_best_cp <- rpart_cv_3$bestTune$cp
-tfidf_2_best_results <- with(rpart_cv_3, results[results$cp == tfidf_2_best_cp,])
+tfidf_2_best_results <- rpart_cv_3$results %>% filter(cp == tfidf_2_best_cp)
 
 # Compare the performance of the three classification models built so far
 data.frame(rbind(tf_best_results, tfidf_best_results, tfidf_2_best_results), 
            row.names = c("TF", "Norm_TF-IDF", "Top2.5p_Ngram"))
-# The model has notably weaker performance than the previous two. This suggests  
+# The model has slightly weaker performance than the previous two. This suggests  
 # that, in this case, the introduction of bigrams has brought in more noise 
 # than signal.
 
@@ -705,15 +707,9 @@ train_dfm_4_svd
 # We'll use the *irlba* R package for SVD
 library(irlba)
 set.seed(seed)
-svd_res <- irlba(t(as.matrix(train_dfm_4_svd)), # SVD / LSA requires TDM (not DTM) as its input 
+svd_res <- irlba(t(as.matrix(train_dfm_4_svd)), # SVD / LSA requires TDM (not DTM) as its input
                  nv = 300, # the number of dimensions (singular vectors) to estimate
-                 maxit = 600) # maxit is set to be twice larger than nv 
-
-# Save the SVD result to have a quick access to it later
-saveRDS(svd_res, "models/classification/svd_res.RData")
-
-# Load the saved model
-# svd_res <- readRDS("models/classification/svd_res.RData")
+                 maxit = 600) # maxit is set to be twice larger than nv
 
 # Examine the result:
 str(svd_res)
@@ -722,6 +718,12 @@ str(svd_res)
 #     the extracted dimensions and the ngrams 
 # v - corresponds to the right singular vector and respresents relation between
 #     the extracted dimensions and the documents
+
+# Save the SVD result to have a quick access to it later
+saveRDS(svd_res$d, "models/classification/svd_d.RData")
+saveRDS(svd_res$u, "models/classification/svd_u.RData")
+saveRDS(svd_res$v, "models/classification/svd_v.RData")
+
 
 # A glimpse into the new feature set (the right singular vector):
 View(svd_res$v[1:20,1:50])
@@ -761,7 +763,7 @@ train_svd_df <- cbind(Label = train_2cl$newsgroup, data.frame(svd_res$v))
 # Build a DT-model with an expanded grid search space - as we now have
 # significantly smaller number of features, CV will be far more efficient 
 cpGrid_2 = expand.grid( .cp = seq(from = 0.0005, to = 0.02, by = 0.0005)) 
-rpart_cv_4 <- cross_validate_classifier(seed, 
+rpart_cv_4 <- cross_validate_classifier(seed,
                                         nclust = 5,
                                         train.data = train_svd_df,
                                         ml.method = "rpart",
@@ -779,7 +781,7 @@ plot(rpart_cv_4)
 
 # Extract and store evaluation metrics for the best performing model
 svd_best_cp <- rpart_cv_4$bestTune$cp
-svd_best_results <- with(rpart_cv_4, results[results$cp==svd_best_cp,])
+svd_best_results <- rpart_cv_4$results %>% filter(cp==svd_best_cp)
 
 # Compare the performance of the present model with the performance of the previous models
 comparison <- data.frame(rbind(tf_best_results %>% select(-cp), # exclude the cp parameter 
@@ -832,7 +834,7 @@ mtry_Grid = expand.grid( .mtry = seq(from = 1, to = n_features, length.out = 10)
 # (5 * 10 * 1000) + 1000 = 51,000 trees!
 
 # Build a RF classifier
-rf_cv_1 <- cross_validate_classifier(seed, 
+rf_cv_1 <- cross_validate_classifier(seed,
                                      nclust = 5,
                                      train.data = train_svd_df,
                                      ml.method = "rf",
@@ -850,7 +852,7 @@ plot(rf_cv_1)
 
 # Extract evaluaton measures for the best performing model 
 rf_1_best_mtry <- rf_cv_1$bestTune$mtry
-rf_1_best_res <- with(rf_cv_1, results[results$mtry==rf_1_best_mtry,])
+rf_1_best_res <- rf_cv_1$results %>% filter(mtry==rf_1_best_mtry)
 
 # Compare the results with the previously CV-ed models
 comparison <- data.frame(rbind(comparison, 
@@ -899,7 +901,7 @@ plot(rf_cv_2)
 
 # Extract evaluaton measures for the best performing model (among the CV-ed ones)
 rf_2_best_mtry <- rf_cv_2$bestTune$mtry
-rf_2_best_results <- with(rf_cv_2, results[results$mtry==rf_2_best_mtry,])
+rf_2_best_results <- rf_cv_2$results %>% filter(mtry==rf_2_best_mtry)
 
 # Compare the results with the previously built models
 comparison <- data.frame(rbind(comparison, 
@@ -933,7 +935,7 @@ rf_2_f_imp <- data.frame(Feature=row.names(rf_2_f_imp),
 rf_2_f_imp <- arrange(rf_2_f_imp, desc(Importance))
 # Check the position of the 3 hand-crafted features
 which(rf_2_f_imp$Feature %in% c("TokenCount", "SentCount", "TTR"))
-# 51th,  78th, and 211th place
+# 53th,  76th, and 125th place
 
 ##################
 # TEST THE MODEL

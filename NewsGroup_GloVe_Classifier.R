@@ -306,7 +306,7 @@ rf_cv_1 <- cross_validate_classifier(seed,
 saveRDS(rf_cv_1, "models/glove/rf_cv_1.RData")
 
 # Load the saved model
-# rf_cv_1 <- readRDS("models/glove/rf_cv_1.RData")
+rf_cv_1 <- readRDS("models/glove/rf_cv_1.RData")
 
 # Check out the CV results
 rf_cv_1
